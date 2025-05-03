@@ -174,7 +174,7 @@
         const inputTokens = estimateTokens(file.size.toString());
         console.log("Estimated Input Tokens:", inputTokens);
 
-        const response = await fetch('https://your-backend-url/generate-stories', {
+        const response = await fetch('https://jira-story-generator.onrender.com', {
           method: 'POST',
           body: formData
         });
