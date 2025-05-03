@@ -1,0 +1,626 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jira Story Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .printable, .printable * {
+        visibility: visible;
+      }
+      .printable {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        padding: 20px;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+    const { jsPDF } = window.jspdf;
+
+    // Mock fallback for Jira stories
+    const mockJiraStories = () => [
+      {
+        summary: "Implement dashboard header",
+        description: "Create a responsive header with logo, title, and user profile dropdown using React and Tailwind CSS.",
+        acceptanceCriteria: [
+          "Header is sticky and visible on all pages.",
+          "Logo links to homepage.",
+          "Dropdown includes user settings and logout."
+        ],
+        storyPoints: { junior: 3, midLevel: 2, senior: 1 },
+        priority: "High",
+        assignee: "Frontend Team",
+        labels: ["frontend", "ui"],
+        epicLink: "",
+        components: ["UI"]
+      },
+      {
+        summary: "Create sidebar navigation",
+        description: "Build a collapsible sidebar with navigation links to dashboard, reports, and settings.",
+        acceptanceCriteria: [
+          "Sidebar collapses on mobile screens.",
+          "Active link is highlighted.",
+          "Supports at least 5 navigation items."
+        ],
+        storyPoints: { junior: 4, midLevel: 3, senior: 2 },
+        priority: "High",
+        assignee: "Frontend Team",
+        labels: ["frontend", "ui"],
+        epicLink: "",
+        components: ["UI"]
+      },
+      {
+        summary: "Develop data table for dashboard",
+        description: "Implement a sortable, paginated data table displaying user data, integrated with a backend API.",
+        acceptanceCriteria: [
+          "Table supports sorting by at least 3 columns.",
+          "Pagination handles 10 rows per page.",
+          "Data loads in under 2 seconds."
+        ],
+        storyPoints: { junior: 8, midLevel: 5, senior: 3 },
+        priority: "Medium",
+        assignee: "Frontend Team",
+        labels: ["frontend", "backend"],
+        epicLink: "",
+        components: ["UI", "API"]
+      },
+      {
+        summary: "Add action buttons to dashboard",
+        description: "Create buttons for adding, editing, and deleting records, with confirmation modals.",
+        acceptanceCriteria: [
+          "Buttons trigger correct API calls.",
+          "Modals appear for edit and delete actions.",
+          "Actions are disabled for unauthorized users."
+        ],
+        storyPoints: { junior: 5, midLevel: 3, senior: 2 },
+        priority: "Medium",
+        assignee: "Frontend Team",
+        labels: ["frontend", "backend"],
+        epicLink: "",
+        components: ["UI", "API"]
+      },
+      {
+        summary: "Write integration tests for dashboard",
+        description: "Create Cypress tests to verify header, sidebar, table, and button functionality.",
+        acceptanceCriteria: [
+          "Tests cover 90% of UI interactions.",
+          "All tests pass in CI pipeline.",
+          "Tests run in under 5 minutes."
+        ],
+        storyPoints: { junior: 6, midLevel: 4, senior: 3 },
+        priority: "Low",
+        assignee: "QA Team",
+        labels: ["qa", "testing"],
+        epicLink: "",
+        components: ["QA"]
+      }
+    ];
+
+    // Estimate tokens for a string (characters/4, capped for sanity)
+    const estimateTokens = (text) => {
+      const tokens = Math.ceil(text.length / 4);
+      return Math.min(tokens, 50000); // Cap to prevent overestimation
+    };
+
+    // Generate Jira stories using backend endpoint
+    const generateJiraStories = async (file, updateTokenUsage) => {
+      try {
+        if (!file || !file.type.startsWith("image/")) throw new Error("Invalid file. Please upload a valid image.");
+
+        // Prepare form data
+        const formData = new FormData();
+        formData.append('image', file);
+
+        // Estimate input tokens (approximate, since backend handles prompt)
+        const inputTokens = estimateTokens(file.size.toString());
+        console.log("Estimated Input Tokens:", inputTokens);
+
+        const response = await fetch('https://your-backend-url/generate-stories', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Backend Error Response:", { status: response.status, text: errorText });
+          if (response.status === 401) throw new Error("Invalid API key. Please verify your key in console.x.ai.");
+          if (response.status === 429) throw new Error("API rate limit exceeded. Please wait a few minutes and try again.");
+          if (response.status === 402) throw new Error("Insufficient API credits. Please check your credits in console.x.ai.");
+          if (response.status === 400) throw new Error("Bad request. Check the image or backend configuration.");
+          throw new Error(`Backend request failed: ${response.status} - ${errorText || response.statusText}`);
+        }
+
+        const stories = await response.json();
+        console.log("Backend Response:", JSON.stringify(stories, null, 2));
+
+        // Update token usage (output tokens estimated)
+        const outputTokens = estimateTokens(JSON.stringify(stories));
+        console.log("Output Tokens:", outputTokens);
+        updateTokenUsage(inputTokens, outputTokens);
+
+        return stories;
+      } catch (error) {
+        console.error("Error generating stories:", error.message, error.stack);
+        throw error;
+      }
+    };
+
+    const App = () => {
+      const [file, setFile] = useState(null);
+      const [preview, setPreview] = useState(null);
+      const [jiraStories, setJiraStories] = useState([]);
+      const [apiKey, setApiKey] = useState("");
+      const [error, setError] = useState("");
+      const [isLoading, setIsLoading] = useState(false);
+      const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
+      const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+      // Update token usage for the session
+      const updateTokenUsage = (inputTokens, outputTokens) => {
+        setSessionTokens(prev => ({
+          input: prev.input + inputTokens,
+          output: prev.output + outputTokens
+        }));
+      };
+
+      // Reset token counter
+      const resetTokenUsage = () => {
+        setSessionTokens({ input: 0, output: 0 });
+      };
+
+      const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        if (selectedFile && selectedFile.type.startsWith("image/")) {
+          setFile(selectedFile);
+          const reader = new FileReader();
+          reader.onloadend = () => setPreview(reader.result);
+          reader.readAsDataURL(selectedFile);
+        } else {
+          setError("Please upload a valid image file (PNG/JPEG).");
+          setFile(null);
+          setPreview(null);
+        }
+      };
+
+      const handleGenerateStories = async () => {
+        if (!file) {
+          setError("Please upload an image first.");
+          return;
+        }
+        setError("");
+        setIsLoading(true);
+        try {
+          const stories = await generateJiraStories(file, updateTokenUsage);
+          setJiraStories(stories);
+        } catch (err) {
+          setError(err.message || "Failed to generate stories. Using mock data.");
+          setJiraStories(mockJiraStories());
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleUpdateStory = (index, field, value) => {
+        const updatedStories = [...jiraStories];
+        if (field === "storyPoints") {
+          updatedStories[index].storyPoints = { ...updatedStories[index].storyPoints, ...value };
+        } else if (field === "acceptanceCriteria" || field === "labels" || field === "components") {
+          updatedStories[index][field] = typeof value === "string" ? value.split("\n").filter(v => v) : value;
+        } else {
+          updatedStories[index][field] = value;
+        }
+        setJiraStories(updatedStories);
+      };
+
+      const handleExport = () => {
+        if (!jiraStories.length) {
+          setError("No stories to export.");
+          return;
+        }
+        const blob = new Blob([JSON.stringify(jiraStories, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "jira-stories.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handlePreview = () => {
+        setShowPreviewModal(true);
+      };
+
+      const closePreviewModal = () => {
+        setShowPreviewModal(false);
+      };
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      const handleSendTo = async () => {
+        try {
+          // Capture the printable content
+          const element = document.querySelector('.printable');
+          if (!element) {
+            setError("Cannot generate PDF: Printable content not found.");
+            return;
+          }
+
+          // Generate PDF
+          const canvas = await html2canvas(element, { scale: 2 });
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+          });
+          const imgProps = pdf.getImageProperties(imgData);
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          const pdfBlob = pdf.output('blob');
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+
+          // Trigger download
+          const downloadLink = document.createElement('a');
+          downloadLink.href = pdfUrl;
+          downloadLink.download = 'jira-stories-preview.pdf';
+          downloadLink.click();
+          URL.revokeObjectURL(pdfUrl);
+
+          // Open email client
+          const subject = encodeURIComponent('Jira Stories Preview');
+          const body = encodeURIComponent('Attached are the generated Jira stories. Please find the PDF attached.');
+          window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        } catch (error) {
+          console.error('Error generating PDF or opening email:', error);
+          setError('Failed to generate PDF or open email client. Please try again.');
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-100 p-6">
+          <h1 className="text-3xl font-bold text-center mb-6">Jira Story Generator</h1>
+          <div className="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow">
+            {/* Error Message */}
+            {error && (
+              <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
+                {error}
+              </div>
+            )}
+
+            {/* API Key Input */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">xAI API Key</label>
+              <input
+                type="text"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="mt-1 block w-full border-gray-300 rounded-md p-2"
+                placeholder="Enter your xAI API key (e.g., sk_...)"
+                disabled
+              />
+              <p className="mt-2 text-sm text-gray-600">
+                API key is now managed server-side. Contact admin to configure.
+              </p>
+            </div>
+
+            {/* File Upload */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Upload UI Design/Image</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="mt-1 block w-full border-gray-300 rounded-md"
+              />
+              {preview && (
+                <img src={preview} alt="Preview" className="mt-4 max-w-md rounded" />
+              )}
+            </div>
+
+            {/* Generate Button */}
+            <button
+              onClick={handleGenerateStories}
+              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 mb-6 disabled:bg-blue-300 relative"
+              disabled={isLoading}
+            >
+              {isLoading && (
+                <svg
+                  className="animate-spin h-5 w-5 text-white absolute left-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              )}
+              {isLoading ? "Generating Stories..." : "Generate Jira Stories"}
+            </button>
+
+            {/* Stories Table */}
+            {jiraStories.length > 0 && (
+              <div className="border-t pt-4">
+                <h2 className="text-xl font-semibold mb-4">Generated Jira Stories</h2>
+                <div className="overflow-x-auto">
+                  <table className="table-auto min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[200px] max-w-xs">Summary</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[200px]">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[200px]">Acceptance Criteria</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[180px]">Story Points (Jr, Mid, Sr)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[120px] sm:min-w-[140px]">Priority</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[140px]">Assignee</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[140px]">Labels</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[120px]">Epic Link</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase min-w-[140px]">Components</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {jiraStories.map((story, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-2 min-w-[200px] max-w-xs whitespace-normal break-words">
+                            <textarea
+                              value={story.summary}
+                              onChange={(e) => handleUpdateStory(index, "summary", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm whitespace-normal break-words resize-y"
+                              rows="2"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[200px] whitespace-normal">
+                            <textarea
+                              value={story.description}
+                              onChange={(e) => handleUpdateStory(index, "description", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm whitespace-normal resize-y"
+                              rows="2"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[200px] whitespace-normal">
+                            <textarea
+                              value={story.acceptanceCriteria.join("\n")}
+                              onChange={(e) => handleUpdateStory(index, "acceptanceCriteria", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm whitespace-normal resize-y"
+                              rows="2"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[180px]">
+                            <div className="flex space-x-2">
+                              <input
+                                type="number"
+                                value={story.storyPoints.junior}
+                                onChange={(e) => handleUpdateStory(index, "storyPoints", { junior: parseInt(e.target.value) })}
+                                className="w-16 border-gray-300 rounded-md p-1 text-sm"
+                                placeholder="Jr"
+                              />
+                              <input
+                                type="number"
+                                value={story.storyPoints.midLevel}
+                                onChange={(e) => handleUpdateStory(index, "storyPoints", { midLevel: parseInt(e.target.value) })}
+                                className="w-16 border-gray-300 rounded-md p-1 text-sm"
+                                placeholder="Mid"
+                              />
+                              <input
+                                type="number"
+                                value={story.storyPoints.senior}
+                                onChange={(e) => handleUpdateStory(index, "storyPoints", { senior: parseInt(e.target.value) })}
+                                className="w-16 border-gray-300 rounded-md p-1 text-sm"
+                                placeholder="Sr"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 min-w-[120px] sm:min-w-[140px]">
+                            <select
+                              value={story.priority}
+                              onChange={(e) => handleUpdateStory(index, "priority", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm"
+                            >
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-2 min-w-[140px]">
+                            <input
+                              type="text"
+                              value={story.assignee}
+                              onChange={(e) => handleUpdateStory(index, "assignee", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm"
+                              placeholder="e.g., Frontend Team"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[140px]">
+                            <input
+                              type="text"
+                              value={story.labels.join(", ")}
+                              onChange={(e) => handleUpdateStory(index, "labels", e.target.value.split(",").map(l => l.trim()).filter(l => l))}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm"
+                              placeholder="e.g., frontend, ui"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[120px]">
+                            <input
+                              type="text"
+                              value={story.epicLink}
+                              onChange={(e) => handleUpdateStory(index, "epicLink", e.target.value)}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm"
+                              placeholder="e.g., EPIC-123"
+                            />
+                          </td>
+                          <td className="px-4 py-2 min-w-[140px]">
+                            <input
+                              type="text"
+                              value={story.components.join(", ")}
+                              onChange={(e) => handleUpdateStory(index, "components", e.target.value.split(",").map(c => c.trim()).filter(c => c))}
+                              className="w-full border-gray-300 rounded-md p-1 text-sm"
+                              placeholder="e.g., UI, API"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex space-x-4 mt-6">
+                  <button
+                    onClick={handlePreview}
+                    className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+                  >
+                    Preview Stories
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
+                  >
+                    Export Stories as JSON
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Preview Modal */}
+            {showPreviewModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto printable">
+                  <h2 className="text-2xl font-bold mb-4">Story Preview</h2>
+                  {jiraStories.length > 0 ? (
+                    <div className="space-y-4">
+                      {jiraStories.map((story, index) => (
+                        <div key={index} className="border p-4 rounded-md">
+                          <h3 className="text-lg font-semibold">{story.summary}</h3>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Description:</strong> {story.description}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Acceptance Criteria:</strong></p>
+                          <ul className="list-disc pl-5 text-sm text-gray-600">
+                            {story.acceptanceCriteria.map((criteria, i) => (
+                              <li key={i}>{criteria}</li>
+                            ))}
+                          </ul>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Story Points:</strong> Jr: {story.storyPoints.junior}, Mid: {story.storyPoints.midLevel}, Sr: {story.storyPoints.senior}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Priority:</strong> {story.priority}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Assignee:</strong> {story.assignee}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Labels:</strong> {story.labels.join(", ")}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Epic Link:</strong> {story.epicLink || "None"}</p>
+                          <p className="text-sm text-gray-600 mt-1"><strong>Components:</strong> {story.components.join(", ")}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-600">No stories to preview.</p>
+                  )}
+                  <div className="flex space-x-4 mt-6 no-print">
+                    <button
+                      onClick={handlePrint}
+                      className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+                    >
+                      Print
+                    </button>
+                    <button
+                      onClick={handleSendTo}
+                      className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
+                    >
+                      Send to
+                    </button>
+                    <button
+                      onClick={closePreviewModal}
+                      className="w-full bg-gray-300 text-gray-700 p-2 rounded hover:bg-gray-400"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Token Usage Counter */}
+            <div className="mt-6 text-center text-sm text-gray-600 flex justify-center items-center space-x-4">
+              <span>
+                Tokens used this session: {sessionTokens.input + sessionTokens.output} (Input: {sessionTokens.input}, Output: {sessionTokens.output})
+              </span>
+              <button
+                onClick={resetTokenUsage}
+                className="bg-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-400"
+              >
+                Reset Token Counter
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
