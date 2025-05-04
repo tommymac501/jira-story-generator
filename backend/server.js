@@ -7,7 +7,8 @@ require('dotenv').config();
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors());
+// Configure CORS to allow only the frontend URL
+app.use(cors({ origin: 'https://jira-story-backend.onrender.com' }));
 app.use(express.json());
 
 app.post('/generate-stories', upload.single('image'), async (req, res) => {
@@ -48,8 +49,8 @@ Return only a clean, valid JSON array of objects, with no Markdown, backticks, c
         }
       ],
       model: "grok-vision-beta",
-      max_tokens: 1000,
       stream: false,
+      max_tokens: 1000,
       temperature: 0
     };
 
