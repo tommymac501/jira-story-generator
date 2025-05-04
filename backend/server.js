@@ -21,6 +21,7 @@ app.post('/generate-stories', upload.single('image'), async (req, res) => {
 
     const base64Image = req.file.buffer.toString('base64');
     const prompt = `
+You are a professional Project Manager whos built dozens of Enterprise grade applications. You have a high attention to detail, and an intuitive mind when it comes to what the business wants and needs. 
 Analyze this UI design image and generate 5 Jira stories for its implementation. Each story must include:
 - summary (string, short title)
 - description (string, detailed task explanation)

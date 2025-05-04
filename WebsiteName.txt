@@ -1,1 +1,6 @@
 https://jira-story-generator.onrender.com
+https://jira-story-backend.onrender.com
+
+My Render dashboard: https://dashboard.render.com
+X.com API Console: https://console.x.ai/
+
