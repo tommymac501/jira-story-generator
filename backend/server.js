@@ -48,6 +48,7 @@ Return only a clean, valid JSON array of objects, with no Markdown, backticks, c
         }
       ],
       model: "grok-vision-beta",
+      max_tokens: 1000,
       stream: false,
       temperature: 0
     };
