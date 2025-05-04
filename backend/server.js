@@ -8,7 +8,7 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configure CORS to allow only the frontend URL
-app.use(cors({ origin: 'https://jira-story-backend.onrender.com' }));
+app.use(cors({ origin: 'https://jira-story-generator.onrender.com' }));
 app.use(express.json());
 
 app.post('/generate-stories', upload.single('image'), async (req, res) => {
