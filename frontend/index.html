@@ -37,7 +37,7 @@
     const { useState } = React;
     const { jsPDF } = window.jspdf;
 
-    // Mock fallback for Jira stories
+    // Mock fallback for Jira stories (for token estimation reference)
     const mockJiraStories = () => [
       {
         summary: "Implement dashboard header",
@@ -117,11 +117,7 @@
           if (response.status === 429) throw new Error("API rate limit exceeded. Please wait a few minutes and try again.");
           if (response.status === 402) throw new Error("Insufficient API credits. Please check your credits in console.x.ai.");
           if (response.status === 400) throw new Error("Bad request. Check the image or backend configuration.");
-          if (response.status === 500) {
-            console.log("Backend failed to parse API response, falling back to mock data.");
-            return mockJiraStories();
-          }
-          throw new Error(`Backend request failed: ${response.status} - ${errorText || response.statusText}`);
+          throw new Error("Backend request failed: " + response.status + " - " + (errorText || response.statusText));
         }
 
         const stories = await response.json();
@@ -186,8 +182,8 @@
           const stories = await generateJiraStories(file, updateTokenUsage);
           setJiraStories(stories);
         } catch (err) {
-          setError(err.message || "Failed to generate stories. Using mock data.");
-          setJiraStories(mockJiraStories());
+          setError(err.message || "Failed to generate stories.");
+          setJiraStories([]);
         } finally {
           setIsLoading(false);
         }
