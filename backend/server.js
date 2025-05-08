@@ -32,7 +32,7 @@ app.post('/generate-stories', upload.single('image'), async function(req, res) {
     console.log('Encoding image to base64');
     const base64Image = req.file.buffer.toString('base64');
     const prompt = 
-      'Analyze this UI design image and generate 3 Jira stories for its implementation. Each story must include:\n' +
+      'Analyze this UI design image and generate no more than 10 Jira stories for its implementation. Each story must include:\n' +
       '- summary (string, short title)\n' +
       '- description (string, detailed task explanation, avoid using quotes within the description to prevent JSON parsing issues)\n' +
       '- acceptanceCriteria (array of 3-5 strings, bullet points, avoid using quotes within the criteria)\n' +
