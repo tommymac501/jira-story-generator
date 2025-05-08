@@ -63,7 +63,7 @@ app.use(function(req, res, next) {
 });
 
 // Configure CORS to allow only the frontend URL
-app.use(cors({ origin: 'https://Agile-story-frontend.onrender.com' }));
+app.use(cors({ origin: 'https://jira-story-frontend.onrender.com' }));
 app.use(express.json());
 
 app.post('/generate-stories', upload.single('image'), async function(req, res) {
