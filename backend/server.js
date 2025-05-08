@@ -63,7 +63,7 @@ app.use(function(req, res, next) {
 });
 
 // Configure CORS to allow only the frontend URL
-app.use(cors({ origin: 'https://jira-story-generator.onrender.com' }));
+app.use(cors({ origin: 'https://Agile-story-generator.onrender.com' }));
 app.use(express.json());
 
 app.post('/generate-stories', upload.single('image'), async function(req, res) {
@@ -81,7 +81,7 @@ app.post('/generate-stories', upload.single('image'), async function(req, res) {
     console.log('Encoding image to base64');
     const base64Image = req.file.buffer.toString('base64');
     const prompt = 
-      'Analyze this UI design image and generate no more than 10 Agile stories for its implementation. Each story must include:\n' +
+      'Analyze this UI design image and generate as many stories for its implementation as needed. Each story must include:\n' +
       '- summary (string, short title)\n' +
       '- description (string, detailed task explanation, avoid using quotes within the description to prevent JSON parsing issues)\n' +
       '- acceptanceCriteria (array of 3-5 strings, bullet points, avoid using quotes within the criteria)\n' +
