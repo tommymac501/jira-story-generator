@@ -8,8 +8,8 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Log incoming requests
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+app.use(function(req, res, next) {
+  console.log('[' + new Date().toISOString() + '] ' + req.method + ' ' + req.url);
   next();
 });
 
@@ -17,7 +17,7 @@ app.use((req, res, next) => {
 app.use(cors({ origin: 'https://jira-story-generator.onrender.com' }));
 app.use(express.json());
 
-app.post('/generate-stories', upload.single('image'), async (req, res) => {
+app.post('/generate-stories', upload.single('image'), async function(req, res) {
   try {
     console.log('Received request to /generate-stories');
     if (!req.file) {
@@ -31,20 +31,19 @@ app.post('/generate-stories', upload.single('image'), async (req, res) => {
 
     console.log('Encoding image to base64');
     const base64Image = req.file.buffer.toString('base64');
-    const prompt = `
-Analyze this UI design image and generate no more than 10 Agile stories for its implementation. Each story must include:
-- summary (string, short title)
-- description (string, detailed task explanation, avoid using quotes within the description to prevent JSON parsing issues)
-- acceptanceCriteria (array of 3-5 strings, bullet points, avoid using quotes within the criteria)
-- storyPoints (object with numeric junior, midLevel, senior estimates)
-- priority (string, "High", "Medium", or "Low")
-- assignee (string, e.g., "Frontend Team")
-- labels (array of strings, relevant tags)
-- epicLink (string, optional, e.g., "EPIC-123")
-- components (array of strings, e.g., ["UI", "API"])
-Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backticks, code fences, prose, or any additional text. Ensure all strings are properly escaped to be JSON-compatible. Example:
-[{"summary":"Example story","description":"Details here","acceptanceCriteria":["Criteria 1","Criteria 2"],"storyPoints":{"junior":3,"midLevel":2,"senior":1},"priority":"High","assignee":"Team","labels":["tag"],"epicLink":"","components":["UI"]}]
-    `;
+    const prompt = 
+      'Analyze this UI design image and generate 3 Jira stories for its implementation. Each story must include:\n' +
+      '- summary (string, short title)\n' +
+      '- description (string, detailed task explanation, avoid using quotes within the description to prevent JSON parsing issues)\n' +
+      '- acceptanceCriteria (array of 3-5 strings, bullet points, avoid using quotes within the criteria)\n' +
+      '- storyPoints (object with numeric junior, midLevel, senior estimates)\n' +
+      '- priority (string, "High", "Medium", or "Low")\n' +
+      '- assignee (string, e.g., "Frontend Team")\n' +
+      '- labels (array of strings, relevant tags)\n' +
+      '- epicLink (string, optional, e.g., "EPIC-123")\n' +
+      '- components (array of strings, e.g., ["UI", "API"])\n' +
+      'Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backticks, code fences, prose, or any additional text. Ensure all strings are properly escaped to be JSON-compatible. Example:\n' +
+      '[{"summary":"Example story","description":"Details here","acceptanceCriteria":["Criteria 1","Criteria 2"],"storyPoints":{"junior":3,"midLevel":2,"senior":1},"priority":"High","assignee":"Team","labels":["tag"],"epicLink":"","components":["UI"]}]';
 
     console.log('Preparing xAI API request');
     const requestBody = {
@@ -54,7 +53,7 @@ Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backt
           role: "user",
           content: [
             { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: `data:image/${req.file.mimetype.split('/')[1]};base64,${base64Image}` } }
+            { type: "image_url", image_url: { url: 'data:image/' + req.file.mimetype.split('/')[1] + ';base64,' + base64Image } }
           ]
         }
       ],
@@ -68,7 +67,7 @@ Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backt
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.XAI_API_KEY}',
+        'Authorization': 'Bearer ' + process.env.XAI_API_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
@@ -76,7 +75,7 @@ Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backt
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.log(`xAI API error: ${response.status} - ${errorText}`);
+      console.log('xAI API error: ' + response.status + ' - ' + errorText);
       return res.status(response.status).json({ error: errorText });
     }
 
@@ -114,14 +113,16 @@ Return ONLY a clean, valid JSON array of objects. Do NOT include Markdown, backt
       console.log('Sending response to client');
       res.json(stories);
     } catch (parseError) {
-      console.log(`Failed to parse API response: ${parseError.message}`);
-      res.status(500).json({ error: `Failed to parse API response: ${parseError.message}` });
+      console.log('Failed to parse API response: ' + parseError.message);
+      res.status(500).json({ error: 'Failed to parse API response: ' + parseError.message });
     }
   } catch (error) {
-    console.error(`Server error: ${error.message}`, error.stack);
+    console.error('Server error: ' + error.message, error.stack);
     res.status(500).json({ error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, function() {
+  console.log('Server running on port ' + PORT);
+});
