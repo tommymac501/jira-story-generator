@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agile Story Generator</title>
+  <title>Jira Story Generator</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.min.js"></script>
@@ -37,8 +37,8 @@
     const { useState } = React;
     const { jsPDF } = window.jspdf;
 
-    // Mock fallback for Agile stories
-    const mockAgileStories = () => [
+    // Mock fallback for Jira stories
+    const mockJiraStories = () => [
       {
         summary: "Implement dashboard header",
         description: "Create a responsive header with logo, title, and user profile dropdown using React and Tailwind CSS.",
@@ -83,36 +83,6 @@
         labels: ["frontend", "backend"],
         epicLink: "",
         components: ["UI", "API"]
-      },
-      {
-        summary: "Add action buttons to dashboard",
-        description: "Create buttons for adding, editing, and deleting records, with confirmation modals.",
-        acceptanceCriteria: [
-          "Buttons trigger correct API calls.",
-          "Modals appear for edit and delete actions.",
-          "Actions are disabled for unauthorized users."
-        ],
-        storyPoints: { junior: 5, midLevel: 3, senior: 2 },
-        priority: "Medium",
-        assignee: "Frontend Team",
-        labels: ["frontend", "backend"],
-        epicLink: "",
-        components: ["UI", "API"]
-      },
-      {
-        summary: "Write integration tests for dashboard",
-        description: "Create Cypress tests to verify header, sidebar, table, and button functionality.",
-        acceptanceCriteria: [
-          "Tests cover 90% of UI interactions.",
-          "All tests pass in CI pipeline.",
-          "Tests run in under 5 minutes."
-        ],
-        storyPoints: { junior: 6, midLevel: 4, senior: 3 },
-        priority: "Low",
-        assignee: "QA Team",
-        labels: ["qa", "testing"],
-        epicLink: "",
-        components: ["QA"]
       }
     ];
 
@@ -122,8 +92,8 @@
       return Math.min(tokens, 50000); // Cap to prevent overestimation
     };
 
-    // Generate Agile stories using backend endpoint
-    const generateAgileStories = async (file, updateTokenUsage) => {
+    // Generate Jira stories using backend endpoint
+    const generateJiraStories = async (file, updateTokenUsage) => {
       try {
         if (!file || !file.type.startsWith("image/")) throw new Error("Invalid file. Please upload a valid image.");
 
@@ -147,6 +117,10 @@
           if (response.status === 429) throw new Error("API rate limit exceeded. Please wait a few minutes and try again.");
           if (response.status === 402) throw new Error("Insufficient API credits. Please check your credits in console.x.ai.");
           if (response.status === 400) throw new Error("Bad request. Check the image or backend configuration.");
+          if (response.status === 500) {
+            console.log("Backend failed to parse API response, falling back to mock data.");
+            return mockJiraStories();
+          }
           throw new Error(`Backend request failed: ${response.status} - ${errorText || response.statusText}`);
         }
 
@@ -168,7 +142,7 @@
     const App = () => {
       const [file, setFile] = useState(null);
       const [preview, setPreview] = useState(null);
-      const [AgileStories, setAgileStories] = useState([]);
+      const [jiraStories, setJiraStories] = useState([]);
       const [error, setError] = useState("");
       const [isLoading, setIsLoading] = useState(false);
       const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
@@ -209,18 +183,18 @@
         setError("");
         setIsLoading(true);
         try {
-          const stories = await generateAgileStories(file, updateTokenUsage);
-          setAgileStories(stories);
+          const stories = await generateJiraStories(file, updateTokenUsage);
+          setJiraStories(stories);
         } catch (err) {
           setError(err.message || "Failed to generate stories. Using mock data.");
-          setAgileStories(mockAgileStories());
+          setJiraStories(mockJiraStories());
         } finally {
           setIsLoading(false);
         }
       };
 
       const handleUpdateStory = (index, field, value) => {
-        const updatedStories = [...AgileStories];
+        const updatedStories = [...jiraStories];
         if (field === "storyPoints") {
           updatedStories[index].storyPoints = { ...updatedStories[index].storyPoints, ...value };
         } else if (field === "acceptanceCriteria" || field === "labels" || field === "components") {
@@ -228,19 +202,19 @@
         } else {
           updatedStories[index][field] = value;
         }
-        setAgileStories(updatedStories);
+        setJiraStories(updatedStories);
       };
 
       const handleExport = () => {
-        if (!AgileStories.length) {
+        if (!jiraStories.length) {
           setError("No stories to export.");
           return;
         }
-        const blob = new Blob([JSON.stringify(AgileStories, null, 2)], { type: "application/json" });
+        const blob = new Blob([JSON.stringify(jiraStories, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "Agile-stories.json";
+        a.download = "jira-stories.json";
         a.click();
         URL.revokeObjectURL(url);
       };
@@ -284,13 +258,13 @@
           // Trigger download
           const downloadLink = document.createElement('a');
           downloadLink.href = pdfUrl;
-          downloadLink.download = 'Agile-stories-preview.pdf';
+          downloadLink.download = 'jira-stories-preview.pdf';
           downloadLink.click();
           URL.revokeObjectURL(pdfUrl);
 
           // Open email client
-          const subject = encodeURIComponent('Agile Stories Preview');
-          const body = encodeURIComponent('Attached are the generated Agile stories. Please find the PDF attached.');
+          const subject = encodeURIComponent('Jira Stories Preview');
+          const body = encodeURIComponent('Attached are the generated Jira stories. Please find the PDF attached.');
           window.location.href = `mailto:?subject=${subject}&body=${body}`;
         } catch (error) {
           console.error('Error generating PDF or opening email:', error);
@@ -300,7 +274,7 @@
 
       return (
         <div className="min-h-screen bg-gray-100 p-6">
-          <h1 className="text-3xl font-bold text-center mb-6">Agile Story Generator</h1>
+          <h1 className="text-3xl font-bold text-center mb-6">Jira Story Generator</h1>
           <div className="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow">
             {/* Error Message */}
             {error && (
@@ -351,13 +325,13 @@
                   ></path>
                 </svg>
               )}
-              {isLoading ? "Generating Stories..." : "Generate Agile Stories"}
+              {isLoading ? "Generating Stories..." : "Generate Jira Stories"}
             </button>
 
             {/* Stories Table */}
-            {AgileStories.length > 0 && (
+            {jiraStories.length > 0 && (
               <div className="border-t pt-4">
-                <h2 className="text-xl font-semibold mb-4">Generated Agile Stories</h2>
+                <h2 className="text-xl font-semibold mb-4">Generated Jira Stories</h2>
                 <div className="overflow-x-auto">
                   <table className="table-auto min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -374,7 +348,7 @@
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {AgileStories.map((story, index) => (
+                      {jiraStories.map((story, index) => (
                         <tr key={index}>
                           <td className="px-4 py-2 min-w-[200px] max-w-xs whitespace-normal break-words">
                             <textarea
@@ -499,9 +473,9 @@
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto printable">
                   <h2 className="text-2xl font-bold mb-4">Story Preview</h2>
-                  {AgileStories.length > 0 ? (
+                  {jiraStories.length > 0 ? (
                     <div className="space-y-4">
-                      {AgileStories.map((story, index) => (
+                      {jiraStories.map((story, index) => (
                         <div key={index} className="border p-4 rounded-md">
                           <h3 className="text-lg font-semibold">{story.summary}</h3>
                           <p className="text-sm text-gray-600 mt-1"><strong>Description:</strong> {story.description}</p>
