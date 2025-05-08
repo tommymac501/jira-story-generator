@@ -63,7 +63,7 @@ app.use(function(req, res, next) {
 });
 
 // Configure CORS to allow only the frontend URL
-app.use(cors({ origin: 'https://Agile-story-generator.onrender.com' }));
+app.use(cors({ origin: 'https://Agile-story-frontend.onrender.com' }));
 app.use(express.json());
 
 app.post('/generate-stories', upload.single('image'), async function(req, res) {
@@ -108,7 +108,7 @@ app.post('/generate-stories', upload.single('image'), async function(req, res) {
       ],
       model: "grok-vision-beta",
       stream: false,
-      max_tokens: 800,
+      max_tokens: 1200, // Increased to accommodate 3 stories
       temperature: 0
     };
 
@@ -133,7 +133,7 @@ app.post('/generate-stories', upload.single('image'), async function(req, res) {
     let content = data.choices?.[0]?.message?.content;
     if (!content) {
       console.log('No content in API response');
-      return res.status(200).json(mockAgileStories); // Return mock data instead of error
+      return res.status(200).json(mockAgileStories);
     }
 
     // Log the raw API response for debugging
@@ -153,20 +153,48 @@ app.post('/generate-stories', upload.single('image'), async function(req, res) {
         return '"' + p1.replace(/"/g, '\\"') + '"';
       });
 
+    // Remove extra closing brackets within the content
+    let bracketCount = 0;
+    let cleanedContent = '';
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+      if (char === '[') bracketCount++;
+      if (char === ']') bracketCount--;
+      if (bracketCount < 0) {
+        console.log('Removing extra closing bracket at position ' + i);
+        bracketCount = 0;
+        continue;
+      }
+      cleanedContent += char;
+    }
+
     // Ensure the response is a valid JSON array
-    if (!content.startsWith('[') || !content.endsWith(']')) {
-      console.log('Response is not a JSON array, adding brackets');
-      content = '[' + content + ']';
+    cleanedContent = cleanedContent.trim();
+    if (!cleanedContent.startsWith('[')) {
+      console.log('Response does not start with [, adding opening bracket');
+      cleanedContent = '[' + cleanedContent;
+      bracketCount++;
+    }
+    if (bracketCount > 0) {
+      console.log('Adding ' + bracketCount + ' closing brackets to balance');
+      cleanedContent += ']'.repeat(bracketCount);
+    } else if (bracketCount < 0) {
+      console.log('Error: Too many closing brackets, returning mock data');
+      return res.status(200).json(mockAgileStories);
     }
 
     // Log the cleaned response
-    console.log('Cleaned API Response:', content);
+    console.log('Cleaned API Response:', cleanedContent);
 
     try {
       console.log('Parsing API response');
-      const stories = JSON.parse(content);
+      const stories = JSON.parse(cleanedContent);
       if (!Array.isArray(stories)) {
         console.log('Parsed response is not an array');
+        return res.status(200).json(mockAgileStories);
+      }
+      if (stories.length !== 3) {
+        console.log('Expected 3 stories, got ' + stories.length + ', returning mock data');
         return res.status(200).json(mockAgileStories);
       }
       console.log('Sending response to client');
